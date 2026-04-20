@@ -68,8 +68,8 @@ export const WeekCalendar = () => {
         ))}
 
         {hours.map((h, hourIdx) => (
-          <>
-            <div key={`h-${h}`} className="text-[10px] text-muted-foreground py-3 pr-2 text-right">
+          <div key={`row-${h}`} className="contents">
+            <div className="text-[10px] text-muted-foreground py-3 pr-2 text-right">
               {h}
             </div>
             {days.map((_, dayIdx) => {
@@ -93,7 +93,7 @@ export const WeekCalendar = () => {
                 </div>
               );
             })}
-          </>
+          </div>
         ))}
       </div>
 
