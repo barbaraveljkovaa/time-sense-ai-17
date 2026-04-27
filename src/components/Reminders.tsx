@@ -1,36 +1,28 @@
-import { Bell, Clock, MapPin, Coffee } from "lucide-react";
+import { useMemo } from "react";
+import { Bell, Clock } from "lucide-react";
+import { useEvents } from "@/hooks/useEvents";
 
-const reminders = [
-  {
-    icon: Clock,
-    title: "Meeting with Alex",
-    message: "in 45 minutes",
-    hint: "Prep notes ready in Notion",
-    color: "primary",
-  },
-  {
-    icon: MapPin,
-    title: "Leave for design studio",
-    message: "in 10 minutes",
-    hint: "15 min drive · light traffic",
-    color: "warning",
-  },
-  {
-    icon: Coffee,
-    title: "Coffee with Maya",
-    message: "tomorrow · 4:00 PM",
-    hint: "Blue Bottle, downtown",
-    color: "accent",
-  },
-];
-
-const colorMap: Record<string, string> = {
-  primary: "bg-primary-soft text-primary",
-  warning: "bg-focus-mid-soft text-focus-mid",
-  accent: "bg-accent-soft text-accent",
+const fmtRelative = (date: Date, now: Date) => {
+  const diffMin = Math.round((date.getTime() - now.getTime()) / 60000);
+  if (diffMin < 60) return `in ${diffMin} min`;
+  const hrs = Math.round(diffMin / 60);
+  if (hrs < 24) return `in ${hrs}h`;
+  const days = Math.round(hrs / 24);
+  return `in ${days}d`;
 };
 
 export const Reminders = () => {
+  const { events } = useEvents();
+
+  const upcoming = useMemo(() => {
+    const now = new Date();
+    return events
+      .filter((e) => new Date(e.starts_at) > now)
+      .slice(0, 4);
+  }, [events]);
+
+  const now = new Date();
+
   return (
     <div className="rounded-3xl bg-card border border-border shadow-card p-6">
       <div className="flex items-center justify-between mb-5">
@@ -41,26 +33,44 @@ export const Reminders = () => {
         <Bell className="h-4 w-4 text-muted-foreground" />
       </div>
 
-      <div className="space-y-3">
-        {reminders.map((r, i) => {
-          const Icon = r.icon;
-          return (
-            <div
-              key={i}
-              className="flex items-start gap-3 p-3 rounded-2xl hover:bg-secondary/50 transition-smooth cursor-pointer"
-            >
-              <div className={`h-10 w-10 rounded-xl ${colorMap[r.color]} flex items-center justify-center flex-shrink-0`}>
-                <Icon className="h-4 w-4" />
+      {upcoming.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-6 text-center">
+          Nothing on the horizon. Ask the assistant to schedule something.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {upcoming.map((e) => {
+            const s = new Date(e.starts_at);
+            const diffMin = (s.getTime() - now.getTime()) / 60000;
+            const urgent = diffMin < 60;
+            return (
+              <div
+                key={e.id}
+                className="flex items-start gap-3 p-3 rounded-2xl hover:bg-secondary/50 transition-smooth"
+              >
+                <div
+                  className={`h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    urgent ? "bg-focus-mid-soft text-focus-mid" : "bg-primary-soft text-primary"
+                  }`}
+                >
+                  <Clock className="h-4 w-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm truncate">{e.title}</p>
+                  <p className="text-xs text-foreground/70">{fmtRelative(s, now)}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {s.toLocaleString("en-US", {
+                      weekday: "short",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm">{r.title}</p>
-                <p className="text-xs text-foreground/70">{r.message}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">⚡ {r.hint}</p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
