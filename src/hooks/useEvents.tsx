@@ -42,7 +42,7 @@ export const useEvents = () => {
   useEffect(() => {
     if (!user) return;
     const channel = supabase
-      .channel("events-changes")
+      .channel(`events-changes-${user.id}-${crypto.randomUUID()}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "events", filter: `user_id=eq.${user.id}` },
