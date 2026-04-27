@@ -1,20 +1,9 @@
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEvents, AppEvent } from "@/hooks/useEvents";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { toast } from "sonner";
+import { EventDialog } from "@/components/EventDialog";
 
 const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const startHour = 8;
@@ -36,19 +25,15 @@ const typeStyles: Record<AppEvent["event_type"], string> = {
   personal: "bg-accent-soft text-accent border border-accent/30",
 };
 
-interface NewEventDraft {
-  starts_at: Date;
-  ends_at: Date;
-}
-
 export const WeekCalendar = () => {
-  const { events, createEvent, deleteEvent } = useEvents();
+  const { events } = useEvents();
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
-  const [draft, setDraft] = useState<NewEventDraft | null>(null);
-  const [selected, setSelected] = useState<AppEvent | null>(null);
-  const [title, setTitle] = useState("");
-  const [type, setType] = useState<AppEvent["event_type"]>("meeting");
-  const [busy, setBusy] = useState(false);
+
+  // Dialog state — single dialog handles both create + edit
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editEvent, setEditEvent] = useState<AppEvent | null>(null);
+  const [draftStart, setDraftStart] = useState<Date | undefined>(undefined);
+  const [draftEnd, setDraftEnd] = useState<Date | undefined>(undefined);
 
   const days = useMemo(
     () =>
@@ -83,59 +68,44 @@ export const WeekCalendar = () => {
     return `${weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} — ${end.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
   };
 
+  const openCreateAt = (start?: Date, end?: Date) => {
+    setEditEvent(null);
+    setDraftStart(start);
+    setDraftEnd(end);
+    setDialogOpen(true);
+  };
+
+  const openEdit = (ev: AppEvent) => {
+    setEditEvent(ev);
+    setDraftStart(undefined);
+    setDraftEnd(undefined);
+    setDialogOpen(true);
+  };
+
   const handleSlotClick = (dayIdx: number, hour: number) => {
     const s = new Date(days[dayIdx]);
     s.setHours(hour, 0, 0, 0);
     const e = new Date(s);
     e.setHours(hour + 1, 0, 0, 0);
-    setDraft({ starts_at: s, ends_at: e });
-    setTitle("");
-    setType("meeting");
-  };
-
-  const handleCreate = async () => {
-    if (!draft || !title.trim()) return;
-    setBusy(true);
-    try {
-      await createEvent({
-        title: title.trim(),
-        description: null,
-        starts_at: draft.starts_at.toISOString(),
-        ends_at: draft.ends_at.toISOString(),
-        event_type: type,
-        location: null,
-      });
-      toast.success("Event created");
-      setDraft(null);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not create");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!selected) return;
-    setBusy(true);
-    try {
-      await deleteEvent(selected.id);
-      toast.success("Event deleted");
-      setSelected(null);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not delete");
-    } finally {
-      setBusy(false);
-    }
+    openCreateAt(s, e);
   };
 
   return (
     <div className="rounded-3xl bg-card border border-border shadow-card p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <div>
           <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">This week</p>
           <h3 className="font-bold text-lg">{fmtRange()}</h3>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={() => openCreateAt()}
+            className="bg-gradient-primary hover:opacity-90 transition-smooth shadow-card"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Add event
+          </Button>
           <button
             onClick={() => {
               const d = new Date(weekStart);
@@ -143,6 +113,7 @@ export const WeekCalendar = () => {
               setWeekStart(d);
             }}
             className="h-9 w-9 rounded-xl bg-secondary hover:bg-primary-soft transition-smooth flex items-center justify-center"
+            aria-label="Previous week"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -160,6 +131,7 @@ export const WeekCalendar = () => {
               setWeekStart(d);
             }}
             className="h-9 w-9 rounded-xl bg-secondary hover:bg-primary-soft transition-smooth flex items-center justify-center"
+            aria-label="Next week"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -217,13 +189,14 @@ export const WeekCalendar = () => {
                         key={ev.id}
                         onClick={(evt) => {
                           evt.stopPropagation();
-                          setSelected(ev);
+                          openEdit(ev);
                         }}
                         className={cn(
                           "absolute inset-x-0.5 top-0.5 rounded-lg p-1.5 text-[10px] font-semibold leading-tight overflow-hidden cursor-pointer transition-spring hover:scale-[1.02] z-10",
                           typeStyles[ev.event_type],
                         )}
                         style={{ height: `${heightPx}px` }}
+                        title="Click to edit"
                       >
                         {ev.title}
                       </div>
@@ -253,100 +226,18 @@ export const WeekCalendar = () => {
           <div className="h-3 w-3 rounded bg-accent-soft border border-accent/30" />
           <span className="text-muted-foreground">Personal</span>
         </div>
-        <span className="text-muted-foreground ml-auto">Tip: click an empty slot to add an event</span>
+        <span className="text-muted-foreground ml-auto">
+          Tip: click a slot to add, or click an event to edit
+        </span>
       </div>
 
-      <Dialog open={!!draft} onOpenChange={(o) => !o && setDraft(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New event</DialogTitle>
-            <DialogDescription>
-              {draft &&
-                `${draft.starts_at.toLocaleString("en-US", {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })} – ${draft.ends_at.toLocaleTimeString("en-US", {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}`}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="ev-title">Title</Label>
-              <Input
-                id="ev-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Sync with team"
-                autoFocus
-              />
-            </div>
-            <div>
-              <Label>Type</Label>
-              <Select value={type} onValueChange={(v) => setType(v as AppEvent["event_type"])}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="meeting">Meeting</SelectItem>
-                  <SelectItem value="focus">Focus</SelectItem>
-                  <SelectItem value="break">Break</SelectItem>
-                  <SelectItem value="personal">Personal</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDraft(null)} disabled={busy}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreate}
-              disabled={busy || !title.trim()}
-              className="bg-gradient-primary"
-            >
-              {busy ? "Saving..." : "Create event"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{selected?.title}</DialogTitle>
-            <DialogDescription>
-              {selected &&
-                `${new Date(selected.starts_at).toLocaleString("en-US", {
-                  weekday: "long",
-                  month: "long",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })} – ${new Date(selected.ends_at).toLocaleTimeString("en-US", {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}`}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="text-sm text-muted-foreground">
-            Type: <span className="capitalize text-foreground font-medium">{selected?.event_type}</span>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSelected(null)} disabled={busy}>
-              Close
-            </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={busy}>
-              <Trash2 className="h-3.5 w-3.5 mr-1" />
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EventDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        event={editEvent}
+        initialStart={draftStart}
+        initialEnd={draftEnd}
+      />
     </div>
   );
 };
