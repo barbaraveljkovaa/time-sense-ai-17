@@ -65,10 +65,36 @@ export const useEvents = () => {
     return data as AppEvent;
   };
 
+  const updateEvent = async (
+    id: string,
+    patch: Partial<Omit<AppEvent, "id" | "user_id" | "created_at" | "updated_at">>,
+  ) => {
+    const { data, error } = await supabase
+      .from("events")
+      .update(patch)
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as AppEvent;
+  };
+
   const deleteEvent = async (id: string) => {
     const { error } = await supabase.from("events").delete().eq("id", id);
     if (error) throw error;
   };
 
-  return { events, loading, refresh, createEvent, deleteEvent };
+  /** Returns events that overlap [starts_at, ends_at), optionally excluding one id. */
+  const findOverlaps = (starts_at: string, ends_at: string, excludeId?: string) => {
+    const s = new Date(starts_at).getTime();
+    const e = new Date(ends_at).getTime();
+    return events.filter((ev) => {
+      if (excludeId && ev.id === excludeId) return false;
+      const evS = new Date(ev.starts_at).getTime();
+      const evE = new Date(ev.ends_at).getTime();
+      return evS < e && evE > s;
+    });
+  };
+
+  return { events, loading, refresh, createEvent, updateEvent, deleteEvent, findOverlaps };
 };
